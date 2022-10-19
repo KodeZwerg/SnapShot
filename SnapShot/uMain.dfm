@@ -214,8 +214,6 @@ object frmMain: TfrmMain
         Caption = 'Use Print'
         TabOrder = 3
         OnClick = rbPrintClick
-        ExplicitLeft = 391
-        ExplicitTop = -4
       end
     end
     object pnlHide: TPanel
@@ -227,7 +225,6 @@ object frmMain: TfrmMain
       Align = alLeft
       BevelOuter = bvNone
       TabOrder = 1
-      ExplicitLeft = 319
       object cbAutoHide: TCheckBox
         AlignWithMargins = True
         Left = 3
@@ -253,7 +250,6 @@ object frmMain: TfrmMain
       DoubleBuffered = True
       ParentDoubleBuffered = False
       TabOrder = 2
-      ExplicitLeft = 431
       object cbClipboard: TCheckBox
         AlignWithMargins = True
         Left = 3

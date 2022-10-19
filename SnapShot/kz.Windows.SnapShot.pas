@@ -343,6 +343,7 @@ procedure TkzSnapShot.SnapShotGDI(const ALeft, ATop, ARight, ABottom: Integer);
 var
   ShotDC: HDC;
   lpPal: PLogPalette;
+  dummyX, dummyY: Integer;
 begin
 //  MessageBox(0, 'GDI', 'GDI', MB_OK);
   FSuccess     := False;
@@ -350,8 +351,8 @@ begin
   FRect.Top    := ATop;
   FRect.Right  := ARight;
   FRect.Bottom := ABottom;
-  FImageWidth  := FRect.Right - FRect.Left;
-  FImageHeight := FRect.Bottom - FRect.Top;
+  FImageWidth  := Abs(FRect.Right - FRect.Left);
+  FImageHeight := Abs(FRect.Bottom - FRect.Top);
   ShotDC       := GetDCEx(GetDesktopWindow, 0, DCX_WINDOW or DCX_PARENTCLIP or DCX_CLIPSIBLINGS or DCX_CLIPCHILDREN);
   try
     FBMP := TBitmap.Create;
@@ -412,8 +413,8 @@ begin
   FRect.Top    := ATop;
   FRect.Right  := ARight;
   FRect.Bottom := ABottom;
-  FImageWidth  := FRect.Right - FRect.Left;
-  FImageHeight := FRect.Bottom - FRect.Top;
+  FImageWidth  := Abs(FRect.Right - FRect.Left);
+  FImageHeight := Abs(FRect.Bottom - FRect.Top);
   BMP := TBitmap.Create;
   try
     if FDuplication.GetFrame then
@@ -481,8 +482,8 @@ begin
   FRect.Top              := ATop;
   FRect.Right            := ARight;
   FRect.Bottom           := ABottom;
-  FImageWidth            := FRect.Right - FRect.Left;
-  FImageHeight           := FRect.Bottom - FRect.Top;
+  FImageWidth            := Abs(FRect.Right - FRect.Left);
+  FImageHeight           := Abs(FRect.Bottom - FRect.Top);
   BitsPerPixel           := GetDeviceCaps(Application.MainForm.Canvas.Handle, BITSPIXEL);
   FillChar(d3dpp, SizeOf(d3dpp), 0);
   D3DPP.Windowed         := True;
@@ -570,8 +571,8 @@ begin
   FRect.Top              := ATop;
   FRect.Right            := ARight;
   FRect.Bottom           := ABottom;
-  FImageWidth            := FRect.Right - FRect.Left;
-  FImageHeight           := FRect.Bottom - FRect.Top;
+  FImageWidth            := Abs(FRect.Right - FRect.Left);
+  FImageHeight           := Abs(FRect.Bottom - FRect.Top);
   FBMP := TBitmap.Create;
   try
     FBMP.PixelFormat := TPixelFormat.pf24bit;
@@ -673,7 +674,7 @@ begin
     if (FCaption = '') then
       FCaption := 'Everything';
     if (FFilename = '') then
-      FFilename := 'kzScreenShot';
+      FFilename := 'kzSnapShot';
 
     if (FGetFocused and (Win32MajorVersion >= 6) and Winapi.DwmApi.DwmCompositionEnabled) then
       Winapi.DwmApi.DwmGetWindowAttribute(FHWND, DWMWA_EXTENDED_FRAME_BOUNDS, @FRect, SizeOf(FRect))
@@ -682,8 +683,8 @@ begin
 
     if (not FGetFocused) then
       begin
-        FRect.Left   := 0;
-        FRect.Top    := 0;
+        FRect.Left   := GetSystemMetrics(SM_XVIRTUALSCREEN);
+        FRect.Top    := GetSystemMetrics(SM_YVIRTUALSCREEN);
         FRect.Right  := GetSystemMetrics(SM_CXVIRTUALSCREEN);
         FRect.Bottom := GetSystemMetrics(SM_CYVIRTUALSCREEN);
       end;
@@ -723,10 +724,10 @@ end;
 procedure TkzSnapShot.SetHotkeyAll(const AValue: TkzHotkey);
 begin
   UnregisterHotKey(fHiddenWnd, kzHotkeyAll);
-  FHotkeyAll := ToHotkey(AValue);
+  FHotkeyAll := AValue; //ToHotkey(AValue);
   if FActivateHotkey then
     if (not RegisterHotkey(fHiddenWnd, kzHotkeyAll, FHotkeyAll.Modifier, FHotkeyAll.Hotkey)) then
-      MessageBox(Application.MainForm.Handle,
+      MessageBox(0,
         PChar('Hotkey (entire screen) could not be set!'),
         PChar('Error - Hotkey!'),
         MB_OK);
@@ -735,10 +736,10 @@ end;
 procedure TkzSnapShot.SetHotkeyWnd(const AValue: TkzHotkey);
 begin
   UnregisterHotKey(fHiddenWnd, kzHotkeyWnd);
-  FHotkeyWnd := ToHotkey(AValue);
+  FHotkeyWnd := AValue; //ToHotkey(AValue);
   if FActivateHotkey then
     if (not RegisterHotkey(fHiddenWnd, kzHotkeyWnd, FHotkeyWnd.Modifier, FHotkeyWnd.Hotkey)) then
-      MessageBox(Application.MainForm.Handle,
+      MessageBox(0,
         PChar('Hotkey (window client) could not be set!'),
         PChar('Error - Hotkey!'),
         MB_OK);
@@ -747,10 +748,10 @@ end;
 procedure TkzSnapShot.SetHotkeyRec(const AValue: TkzHotkey);
 begin
   UnregisterHotKey(fHiddenWnd, kzHotkeyRec);
-  FHotkeyRec := ToHotkey(AValue);
+  FHotkeyRec := AValue; //ToHotkey(AValue);
   if FActivateHotkey then
     if (not RegisterHotkey(fHiddenWnd, kzHotkeyRec, FHotkeyRec.Modifier, FHotkeyRec.Hotkey)) then
-      MessageBox(Application.MainForm.Handle,
+      MessageBox(0,
         PChar('Hotkey (rectangle select) could not be set!'),
         PChar('Error - Hotkey!'),
         MB_OK);
@@ -831,8 +832,14 @@ begin
                                     try
                                       frmCapture.AlphaBlendValueX := SS.AlphaBlendValue;
                                       SS.AlphaBlendValue := frmCapture.AlphaBlendValueX;
-                                      Application.Restore;
-                                      Application.BringToFront;
+                                      if ((not TForm(SS.Owner).Visible) and SS.AutoHide) then
+                                        begin
+                                          Application.Restore;
+                                          Application.BringToFront;
+                                          Application.Minimize;
+                                        end
+                                        else
+                                          Application.BringToFront;
                                       if SS.AutoHide then
                                         TForm(SS.Owner).Visible := False;
                                       frmCapture.ShowModal;
@@ -842,7 +849,7 @@ begin
                                       if SS.AutoHide then
                                         TForm(SS.Owner).Visible := True;
                                       SS.Caption      := 'Rectangle';
-                                      SS.Filename     := 'kzScreenShot';
+                                      SS.Filename     := 'kzSnapShot';
                                       SS.CreationTime := Now;
                                       SS.Success      := True;
                                       if Assigned(SS.OnMessage) then
