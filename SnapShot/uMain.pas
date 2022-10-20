@@ -44,7 +44,6 @@ implementation
 
 {$R *.dfm}
 
-
 procedure TfrmMain.FormCreate(Sender: TObject);
 begin
   SS := TkzSnapShot.Create(Sender, Self);

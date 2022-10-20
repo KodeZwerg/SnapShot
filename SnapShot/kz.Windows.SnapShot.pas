@@ -7,16 +7,17 @@ unit kz.Windows.SnapShot;
   supports 4 different snapshot engines:
     - GDI (Graphics Device Interface) - fast, may be blocked due overlay
     - DDA (Desktop Duplication API)   - extreme fast, may be blocked by "target window (anti-snapshot)" to work for you
-    - DX9 (DirectX 9)                 - slow, very stable
+    - DX9 (DirectX 9)                 - slow, very stable, limited to 32bit compilations!
     - PRINT (Windows PrintWindow API) - very fast, limited to "entire screen" and "focused window", may be blocked due overlay
                                       - currently on my system not working anymore, i can not find my mistake
 
-  supports 3 different hotkeys
+  supports 4 different hotkeys
     - snap entire screen (alt+print)
     - snap focused window (ctrl+print)
     - snap with a region select (shift+print)
       - using left mouse button to select a region for a normal snapshot
       - using middle mouse button to select a region for a inverted colors snapshot
+    - repeat last (ctrl+shift+print) (this will snap the last region again)
 
   features
     - copy bitmap to clipboard
@@ -66,6 +67,7 @@ type
       FBitmap:          TBitmap;
       FCanvas:          TCanvas;
       FRect:            TRect;
+      FRectOld:         TRect;
       FCaption:         string;
       FFilename:        string;
       FPID:             DWORD;
@@ -75,8 +77,10 @@ type
       FHotkeyAll:       TkzHotkey;
       FHotkeyWnd:       TkzHotkey;
       FHotkeyRec:       TkzHotkey;
+      FHotkeyRepeat:    TkzHotkey;
       FActivateHotkey:  Boolean;
       FAutoClipboard:   Boolean;
+      FRepeatLast:      Boolean;
       FCreationTime:    TDateTime;
       fHiddenWnd:       HWND;
       fHiddenClass:     ATOM;
@@ -96,6 +100,7 @@ type
       procedure SetHotkeyAll(const AValue: TkzHotkey);
       procedure SetHotkeyWnd(const AValue: TkzHotkey);
       procedure SetHotkeyRec(const AValue: TkzHotkey);
+      procedure SetHotkeyRepeat(const AValue: TkzHotkey);
       procedure SetActivateHotkey(const AValue: Boolean);
       procedure SetUseGDI(const AValue: Boolean);
       procedure SetUseDDA(const AValue: Boolean);
@@ -108,7 +113,7 @@ type
       constructor Create(const ASender: TObject; const AOwner: TComponent);
       destructor Destroy; Override;
       procedure Reset;
-      procedure SnapShot(const ALeft, ATop, ARight, ABottom: Integer);
+      procedure SnapShot(ALeft, ATop, ARight, ABottom: Integer);
       procedure SnapShotGDI(const ALeft, ATop, ARight, ABottom: Integer);
       procedure SnapShotDDA(const ALeft, ATop, ARight, ABottom: Integer);
       procedure SnapShotDX9(const ALeft, ATop, ARight, ABottom: Integer);
@@ -136,6 +141,8 @@ type
       property HotkeyAll: TkzHotkey read FHotkeyAll write SetHotkeyAll;
       property HotkeyWnd: TkzHotkey read FHotkeyWnd write SetHotkeyWnd;
       property HotkeyRec: TkzHotkey read FHotkeyRec write SetHotkeyRec;
+      property HotkeyRepeat: TkzHotkey read FHotkeyRepeat write SetHotkeyRepeat;
+      property RepeatLast: Boolean read FRepeatLast write FRepeatLast;
       property ActivateHotkey: Boolean read FActivateHotkey write SetActivateHotkey;
       property Inverted: Boolean read FInverted write FInverted;
       property AlphaBlendValue: Integer read FAlphaBlendValue write FAlphaBlendValue;
@@ -148,58 +155,68 @@ type
 implementation
 
 const
-  kzHotkeyAll = WM_APP + 1001;
-  kzHotkeyWnd = WM_APP + 1002;
-  kzHotkeyRec = WM_APP + 1003;
-  CAPTUREBLT  = $40000000;
+  kzHotkeyAll    = WM_APP + 1001;
+  kzHotkeyWnd    = WM_APP + 1002;
+  kzHotkeyRec    = WM_APP + 1003;
+  kzHotkeyRepeat = WM_APP + 1004;
+  CAPTUREBLT     = $40000000;
 
 
 constructor TkzSnapShot.Create(const ASender: TObject; const AOwner: TComponent);
 begin
   inherited Create;
-  FSender            := ASender;
-  FOwner             := AOwner;
+  FSender                := ASender;
+  FOwner                 := AOwner;
   Reset;
-  FBitmap            := TBitmap.Create;
-  FCanvas            := TCanvas.Create;
-  FDuplication       := TDesktopDuplicationWrapper.Create;
-  FOnMessage         := nil;
+  FBitmap                := TBitmap.Create;
+  FCanvas                := TCanvas.Create;
+  FDuplication           := TDesktopDuplicationWrapper.Create;
+  FOnMessage             := nil;
   CreateHidden;
 
-  FHotkeyAll.Hotkey   := VK_SNAPSHOT;
-  FHotkeyAll.Modifier := MOD_ALT;
-  FHotkeyAll.ALT      := True;
-  FHotkeyAll.CONTROL  := False;
-  FHotkeyAll.SHIFT    := False;
-  FHotkeyAll.WIN      := False;
-  FHotkeyAll.NoRepeat := False;
+  FHotkeyAll.Hotkey      := VK_SNAPSHOT;
+  FHotkeyAll.Modifier    := MOD_ALT;
+  FHotkeyAll.ALT         := True;
+  FHotkeyAll.CONTROL     := False;
+  FHotkeyAll.SHIFT       := False;
+  FHotkeyAll.WIN         := False;
+  FHotkeyAll.NoRepeat    := False;
 
-  FHotkeyWnd.Hotkey   := VK_SNAPSHOT;
-  FHotkeyWnd.Modifier := MOD_CONTROL;
-  FHotkeyWnd.ALT      := True;
-  FHotkeyWnd.CONTROL  := False;
-  FHotkeyWnd.SHIFT    := False;
-  FHotkeyWnd.WIN      := False;
-  FHotkeyWnd.NoRepeat := False;
+  FHotkeyWnd.Hotkey      := VK_SNAPSHOT;
+  FHotkeyWnd.Modifier    := MOD_CONTROL;
+  FHotkeyWnd.ALT         := False;
+  FHotkeyWnd.CONTROL     := True;
+  FHotkeyWnd.SHIFT       := False;
+  FHotkeyWnd.WIN         := False;
+  FHotkeyWnd.NoRepeat    := False;
 
-  FHotkeyRec.Hotkey   := VK_SNAPSHOT;
-  FHotkeyRec.Modifier := MOD_SHIFT;
-  FHotkeyRec.ALT      := True;
-  FHotkeyRec.CONTROL  := False;
-  FHotkeyRec.SHIFT    := False;
-  FHotkeyRec.WIN      := False;
-  FHotkeyRec.NoRepeat := False;
+  FHotkeyRec.Hotkey      := VK_SNAPSHOT;
+  FHotkeyRec.Modifier    := MOD_SHIFT;
+  FHotkeyRec.ALT         := False;
+  FHotkeyRec.CONTROL     := False;
+  FHotkeyRec.SHIFT       := True;
+  FHotkeyRec.WIN         := False;
+  FHotkeyRec.NoRepeat    := False;
 
-  FActivateHotkey := False;
+  FHotkeyRepeat.Hotkey   := VK_SNAPSHOT;
+  FHotkeyRepeat.Modifier := MOD_CONTROL + MOD_SHIFT;
+  FHotkeyRepeat.ALT      := False;
+  FHotkeyRepeat.CONTROL  := True;
+  FHotkeyRepeat.SHIFT    := True;
+  FHotkeyRepeat.WIN      := False;
+  FHotkeyRepeat.NoRepeat := False;
+
+  FActivateHotkey        := False;
   SetActivateHotkey(FActivateHotkey);
 
-  FAutoHide        := True;
-  FAutoClipboard   := False;
+  FAutoHide              := True;
+  FAutoClipboard         := False;
+  FRepeatLast           := False;
 
-  FUseGDI          := False;
-  FUseDDA          := True;
-  FUseDX9          := False;
-  FUsePrint        := False;
+  FUseGDI                := False;
+  FUseDDA                := True;
+  FUseDX9                := False;
+  FUsePrint              := False;
 
   GetBorderHeight;
   GetBorderWidth;
@@ -302,11 +319,18 @@ begin
 end;
 
 
-procedure TkzSnapShot.SnapShot(const ALeft, ATop, ARight, ABottom: Integer);
+procedure TkzSnapShot.SnapShot(ALeft, ATop, ARight, ABottom: Integer);
 var
   fDisable: BOOL;
 begin
   FSuccess := False;
+  if FRepeatLast then
+    begin
+      ALeft   := FRectOld.Left;
+      ATop    := FRectOld.Top;
+      ARight  := FRectOld.Right;
+      ABottom := FRectOld.Bottom;
+    end;
   if ((Win32MajorVersion >= 6) and Winapi.DwmApi.DwmCompositionEnabled) then
     begin
       fDisable := True;
@@ -400,6 +424,10 @@ begin
   end;
   if (FSuccess and FAutoClipboard) then
     CopyToClipboard;
+  FRectOld.Left   := FRect.Left;
+  FRectOld.Top    := FRect.Top;
+  FRectOld.Right  := FRect.Right;
+  FRectOld.Bottom := FRect.Bottom;
 end;
 
 procedure TkzSnapShot.SnapShotDDA(const ALeft, ATop, ARight, ABottom: Integer);
@@ -461,6 +489,10 @@ begin
   end;
   if (FSuccess and FAutoClipboard) then
     CopyToClipboard;
+  FRectOld.Left   := FRect.Left;
+  FRectOld.Top    := FRect.Top;
+  FRectOld.Right  := FRect.Right;
+  FRectOld.Bottom := FRect.Bottom;
 end;
 
 procedure TkzSnapShot.SnapShotDX9(const ALeft, ATop, ARight, ABottom: Integer);
@@ -558,6 +590,10 @@ begin
   end;
   if (FSuccess and FAutoClipboard) then
     CopyToClipboard;
+  FRectOld.Left   := FRect.Left;
+  FRectOld.Top    := FRect.Top;
+  FRectOld.Right  := FRect.Right;
+  FRectOld.Bottom := FRect.Bottom;
 end;
 
 procedure TkzSnapShot.SnapShotPrint(const ALeft, ATop, ARight, ABottom: Integer);
@@ -589,6 +625,10 @@ begin
   end;
   if (FSuccess and FAutoClipboard) then
     CopyToClipboard;
+  FRectOld.Left   := FRect.Left;
+  FRectOld.Top    := FRect.Top;
+  FRectOld.Right  := FRect.Right;
+  FRectOld.Bottom := FRect.Bottom;
 end;
 
 procedure TkzSnapShot.Snap;
@@ -672,16 +712,19 @@ begin
     FCaption := GetWindowTitle(FHWND);
     FFilename := GetWindowPath(FHWND);
     if (FCaption = '') then
-      FCaption := 'Everything';
+      if FRepeatLast then
+        FCaption := 'Repeat Last'
+        else
+        FCaption := 'Everything';
     if (FFilename = '') then
       FFilename := 'kzSnapShot';
 
-    if (FGetFocused and (Win32MajorVersion >= 6) and Winapi.DwmApi.DwmCompositionEnabled) then
+    if ((not FRepeatLast) and FGetFocused and (Win32MajorVersion >= 6) and Winapi.DwmApi.DwmCompositionEnabled) then
       Winapi.DwmApi.DwmGetWindowAttribute(FHWND, DWMWA_EXTENDED_FRAME_BOUNDS, @FRect, SizeOf(FRect))
       else
       Winapi.Windows.GetWindowRect(FHWND, FRect);
 
-    if (not FGetFocused) then
+    if ((not FRepeatLast) and (not FGetFocused)) then
       begin
         FRect.Left   := GetSystemMetrics(SM_XVIRTUALSCREEN);
         FRect.Top    := GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -690,6 +733,7 @@ begin
       end;
 
     SnapShot(FRect.Left, FRect.Top, FRect.Right, FRect.Bottom);
+
   finally
     FCreationTime := Now;
     if Assigned(FOnMessage) then
@@ -757,6 +801,18 @@ begin
         MB_OK);
 end;
 
+procedure TkzSnapShot.SetHotkeyRepeat(const AValue: TkzHotkey);
+begin
+  UnregisterHotKey(fHiddenWnd, kzHotkeyRepeat);
+  FHotkeyRepeat := AValue; //ToHotkey(AValue);
+  if FActivateHotkey then
+    if (not RegisterHotkey(fHiddenWnd, kzHotkeyRepeat, FHotkeyRepeat.Modifier, FHotkeyRepeat.Hotkey)) then
+      MessageBox(0,
+        PChar('Hotkey (repeat last) could not be set!'),
+        PChar('Error - Hotkey!'),
+        MB_OK);
+end;
+
 procedure TkzSnapShot.SetActivateHotkey(const AValue: Boolean);
 begin
   FActivateHotkey := AValue;
@@ -765,12 +821,14 @@ begin
     SetHotkeyAll(FHotkeyAll);
     SetHotkeyWnd(FHotkeyWnd);
     SetHotkeyRec(FHotkeyRec);
+    SetHotkeyRepeat(FHotkeyRepeat);
   end
   else
   begin
     UnregisterHotKey(fHiddenWnd, kzHotkeyAll);
     UnregisterHotKey(fHiddenWnd, kzHotkeyWnd);
     UnregisterHotKey(fHiddenWnd, kzHotkeyRec);
+    UnregisterHotKey(fHiddenWnd, kzHotkeyRepeat);
   end;
 end;
 
@@ -796,71 +854,84 @@ begin
   Result := 0;
   case AMsg of
     WM_HOTKEY: case AWParam of
-                 kzHotkeyAll: begin
-                                SS := TkzSnapShot(GetWindowLongPtr(AWnd, GWL_USERDATA));
-                                if Assigned(SS) then
-                                  begin
-                                    Dummy := SS.GetFocused;
-                                    SS.GetFocused := False;
-                                    SS.Snap;
-                                    SS.GetFocused := Dummy;
-                                  end;
-                                Result := 1;
-                              end;
-                 kzHotkeyWnd: begin
-                                SS := TkzSnapShot(GetWindowLongPtr(AWnd, GWL_USERDATA));
-                                if Assigned(SS) then
-                                  begin
-                                    Dummy := SS.GetFocused;
-                                    SS.GetFocused := True;
-                                    SS.Snap;
-                                    SS.GetFocused := Dummy;
-                                  end;
-                                Result := 1;
-                              end;
-                 kzHotkeyRec: begin
-                                if (frmCapture <> nil) then
-                                  begin
-                                    Result := 1;
-                                    Exit;
-                                  end;
-                                SS := TkzSnapShot(GetWindowLongPtr(AWnd, GWL_USERDATA));
-                                if Assigned(SS) then
-                                  begin
-                                    SS.Success := False;
-                                    frmCapture := TfrmCapture.Create(SS.Owner);
-                                    try
-                                      frmCapture.AlphaBlendValueX := SS.AlphaBlendValue;
-                                      SS.AlphaBlendValue := frmCapture.AlphaBlendValueX;
-                                      if ((not TForm(SS.Owner).Visible) and SS.AutoHide) then
-                                        begin
-                                          Application.Restore;
-                                          Application.BringToFront;
-                                          Application.Minimize;
-                                        end
-                                        else
-                                          Application.BringToFront;
-                                      if SS.AutoHide then
-                                        TForm(SS.Owner).Visible := False;
-                                      frmCapture.ShowModal;
-                                      SS.Reset;
-                                      SS.Inverted := frmCapture.Inverted;
-                                      SS.SnapShot(frmCapture.RectX.Left, frmCapture.RectX.Top, frmCapture.RectX.Right, frmCapture.RectX.Bottom);
-                                      if SS.AutoHide then
-                                        TForm(SS.Owner).Visible := True;
-                                      SS.Caption      := 'Rectangle';
-                                      SS.Filename     := 'kzSnapShot';
-                                      SS.CreationTime := Now;
-                                      SS.Success      := True;
-                                      if Assigned(SS.OnMessage) then
-                                        SS.OnMessage(SS);
-                                    finally
-                                      frmCapture.Free;
-                                      frmCapture := nil;
-                                    end;
-                                  end;
-                                Result := 1;
-                              end;
+                 kzHotkeyAll:    begin
+                                   SS := TkzSnapShot(GetWindowLongPtr(AWnd, GWL_USERDATA));
+                                   if Assigned(SS) then
+                                     begin
+                                       Dummy := SS.GetFocused;
+                                       SS.GetFocused := False;
+                                       SS.Snap;
+                                       SS.GetFocused := Dummy;
+                                     end;
+                                   Result := 1;
+                                 end;
+                 kzHotkeyWnd:    begin
+                                   SS := TkzSnapShot(GetWindowLongPtr(AWnd, GWL_USERDATA));
+                                   if Assigned(SS) then
+                                     begin
+                                       Dummy := SS.GetFocused;
+                                       SS.GetFocused := True;
+                                       SS.Snap;
+                                       SS.GetFocused := Dummy;
+                                     end;
+                                  Result := 1;
+                                 end;
+                 kzHotkeyRec:    begin
+                                   if (frmCapture <> nil) then
+                                     begin
+                                       Result := 1;
+                                       Exit;
+                                     end;
+                                   SS := TkzSnapShot(GetWindowLongPtr(AWnd, GWL_USERDATA));
+                                   if Assigned(SS) then
+                                     begin
+                                       SS.Success := False;
+                                       frmCapture := TfrmCapture.Create(SS.Owner);
+                                       try
+                                         frmCapture.AlphaBlendValueX := SS.AlphaBlendValue;
+                                         SS.AlphaBlendValue := frmCapture.AlphaBlendValueX;
+                                         if ((not TForm(SS.Owner).Visible) and SS.AutoHide) then
+                                           begin
+                                             Application.Restore;
+                                             Application.BringToFront;
+                                             Application.Minimize;
+                                           end
+                                           else
+                                             Application.BringToFront;
+                                         if SS.AutoHide then
+                                           TForm(SS.Owner).Visible := False;
+                                         frmCapture.ShowModal;
+                                         SS.Reset;
+                                         SS.Inverted := frmCapture.Inverted;
+                                         SS.SnapShot(frmCapture.RectX.Left, frmCapture.RectX.Top, frmCapture.RectX.Right, frmCapture.RectX.Bottom);
+                                         if SS.AutoHide then
+                                           TForm(SS.Owner).Visible := True;
+                                         SS.Caption      := 'Rectangle';
+                                         SS.Filename     := 'kzSnapShot';
+                                         SS.CreationTime := Now;
+                                         SS.Success      := True;
+                                         if Assigned(SS.OnMessage) then
+                                           SS.OnMessage(SS);
+                                       finally
+                                         frmCapture.Free;
+                                         frmCapture := nil;
+                                       end;
+                                     end;
+                                   Result := 1;
+                                 end;
+                 kzHotkeyRepeat: begin
+                                   SS := TkzSnapShot(GetWindowLongPtr(AWnd, GWL_USERDATA));
+                                   if Assigned(SS) then
+                                     begin
+                                       Dummy := SS.GetFocused;
+                                       SS.GetFocused := False;
+                                       SS.RepeatLast := True;
+                                       SS.Snap;
+                                       SS.RepeatLast := False;
+                                       SS.GetFocused := Dummy;
+                                     end;
+                                   Result := 1;
+                                 end;
                end;
   end;
   if (Result = 0) then
