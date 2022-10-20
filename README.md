@@ -5,10 +5,10 @@ This is a collection of routines I found on different sources to produce SnapSho
 
 
 supports 4 different engines to choose from
-  - GDI
-  - DDA
-  - DX9
-  - Print
+  - GDI (Graphics Device Interface)
+  - DDA (Desktop Duplication API)
+  - DX9 (DirectX 9 / 32bit only)
+  - Print (Windows API)
  
 supports 4 different Hotkeys (by default disabled but configured to use)
   - ALT+PRINT = capture entire desktop
