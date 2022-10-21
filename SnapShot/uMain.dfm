@@ -4,7 +4,8 @@ object frmMain: TfrmMain
   AlphaBlend = True
   Caption = 
     'kzScreenShot - ALT+PRINT (entire Desktop) - CTRL+PRINT (focused ' +
-    'Window) - SHIFT+PRINT (Region Select)'
+    'Window) - SHIFT+PRINT (Region Select) - CTRL+SHIFT+PRINT (repeat' +
+    ' last snap)'
   ClientHeight = 641
   ClientWidth = 1104
   Color = clBtnFace
@@ -177,7 +178,9 @@ object frmMain: TfrmMain
         Height = 27
         Align = alLeft
         Caption = 'Use GDI'
+        Checked = True
         TabOrder = 0
+        TabStop = True
         OnClick = rbGDIClick
       end
       object rbDX9: TRadioButton
@@ -199,9 +202,7 @@ object frmMain: TfrmMain
         Height = 27
         Align = alLeft
         Caption = 'Use Duplication'
-        Checked = True
         TabOrder = 2
-        TabStop = True
         OnClick = rbDDAClick
       end
       object rbPrint: TRadioButton

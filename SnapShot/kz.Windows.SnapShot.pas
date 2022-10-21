@@ -5,9 +5,9 @@ unit kz.Windows.SnapShot;
   TkzSnapShot - A very easy to use class to create snapshots from windows desktop
 
   supports 4 different snapshot engines:
-    - GDI (Graphics Device Interface) - fast, may be blocked due overlay
-    - DDA (Desktop Duplication API)   - extreme fast, may be blocked by "target window (anti-snapshot)" to work for you
-    - DX9 (DirectX 9)                 - slow, very stable, limited to 32bit compilations!
+    - GDI (Graphics Device Interface) - fast, may be blocked due overlay, supports multimonitor
+    - DDA (Desktop Duplication API)   - extreme fast, may be blocked by "target window (anti-snapshot)" to work for you, primary monitor only
+    - DX9 (DirectX 9)                 - slow, very stable, limited to 32bit compilations! primary monitor only
     - PRINT (Windows PrintWindow API) - very fast, limited to "entire screen" and "focused window", may be blocked due overlay
                                       - currently on my system not working anymore, i can not find my mistake
 
@@ -213,8 +213,8 @@ begin
   FAutoClipboard         := False;
   FRepeatLast           := False;
 
-  FUseGDI                := False;
-  FUseDDA                := True;
+  FUseGDI                := True;
+  FUseDDA                := False;
   FUseDX9                := False;
   FUsePrint              := False;
 
@@ -377,7 +377,7 @@ begin
   FRect.Bottom := ABottom;
   FImageWidth  := Abs(FRect.Right - FRect.Left);
   FImageHeight := Abs(FRect.Bottom - FRect.Top);
-  ShotDC       := GetDCEx(GetDesktopWindow, 0, DCX_WINDOW or DCX_PARENTCLIP or DCX_CLIPSIBLINGS or DCX_CLIPCHILDREN);
+  ShotDC       := GetDCEx(0, 0, DCX_WINDOW or DCX_PARENTCLIP or DCX_CLIPSIBLINGS or DCX_CLIPCHILDREN);
   try
     FBMP := TBitmap.Create;
     try
@@ -461,10 +461,10 @@ begin
             end
             else
               FBMP.Canvas.CopyMode := cmSrcCopy or CAPTUREBLT;
-              FBMP.Canvas.CopyRect(
-                  Rect(0, 0, FImageWidth, FImageHeight),
-                  FCanvas,
-                  Rect(FRect.Left + 2, FRect.Top + 2, FRect.Right - 2, FRect.Bottom - 2));
+          FBMP.Canvas.CopyRect(
+            Rect(0, 0, FImageWidth, FImageHeight),
+              FCanvas,
+              Rect(FRect.Left + 2, FRect.Top + 2, FRect.Right - 2, FRect.Bottom - 2));
           if (GetDeviceCaps(FCanvas.Handle, RASTERCAPS) and RC_PALETTE = RC_PALETTE) then
             begin
               GetMem(lpPal, SizeOf(TLOGPALETTE) + (255 * SizeOf(TPALETTEENTRY)));
